@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/bin/sh
 #
 # Copyright (c) 2009 Rusty Burchfield
 #
@@ -21,35 +21,17 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-# Crude script to show the reference hierarchy of the specified partials.
+# Wrapper for gvimdiff so it can be used as an git external diff tool.
 
-require 'yaml'
-require 'rubygems'
-require 'active_support'
+gvimdiff_path=/usr/bin/gvimdiff
 
-files = ARGV
-partials = {}
+path=$1
+old_file=$2
+old_hex=$3
+old_mode=$4
+new_file=$5
+new_hex=$6
+new_mode=$7
 
-files.each do |file_name|
-  short_name = file_name.sub(/app\/views\//, '').sub(/.html.erb$/, '')
-  partials[short_name] = []
-  File.open(file_name) do |file|
-    file.read.scan(/:partial\s*=>\s*("[^"]*"|'[^']*')/) do |groups|
-      name = groups.first.gsub(/^\s*['"]\/?|['"]\s*$/, '')
-      partials[short_name] << name.sub(/\/([^\/]+)$/, '/_\1')
-    end
-  end
-  partials[short_name].sort!.uniq!
-end
+$gvimdiff_path --nofork $old_file $new_file
 
-parents = partials.keys.select{|n| !partials.values.any?{|v| v.include?(n)}}
-
-def build_tree(partials, file)
-  if !partials[file] || partials[file].empty?
-    return file
-  else
-    {file => partials[file].map{|pn| build_tree(partials, pn)}}
-  end
-end
-
-puts parents.sort.map{|p| build_tree(partials, p)}.to_yaml

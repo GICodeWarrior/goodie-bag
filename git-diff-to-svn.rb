@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/usr/bin/ruby -w
 #
 # Copyright (c) 2009 Rusty Burchfield
 #
@@ -21,35 +21,18 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-# Crude script to show the reference hierarchy of the specified partials.
+# Crude attempt to make a git diff look like an svn diff.  Useful for tools
+# that only like svn diffs.
 
-require 'yaml'
-require 'rubygems'
-require 'active_support'
+diff_options=ARGV.join(' ')
+diff = `unset GIT_EXTERNAL_DIFF; git diff #{diff_options}`;
+svn_rev = `git svn info | awk '/^Revision: /{print$2}'`.chomp
 
-files = ARGV
-partials = {}
-
-files.each do |file_name|
-  short_name = file_name.sub(/app\/views\//, '').sub(/.html.erb$/, '')
-  partials[short_name] = []
-  File.open(file_name) do |file|
-    file.read.scan(/:partial\s*=>\s*("[^"]*"|'[^']*')/) do |groups|
-      name = groups.first.gsub(/^\s*['"]\/?|['"]\s*$/, '')
-      partials[short_name] << name.sub(/\/([^\/]+)$/, '/_\1')
-    end
-  end
-  partials[short_name].sort!.uniq!
+diff.gsub!(/^diff --git (.*\n)+?--- .*\n\+\+\+ .*\n/) do |matched|
+  file = matched.match(/^--- a\/.*$/).to_s.sub(/^--- a\//, '')
+  "Index: #{file}\n#{'='*66}\n" +
+  "--- #{file}\t(revision #{svn_rev})\n" +
+  "+++ #{file}\t(working copy)\n"
 end
 
-parents = partials.keys.select{|n| !partials.values.any?{|v| v.include?(n)}}
-
-def build_tree(partials, file)
-  if !partials[file] || partials[file].empty?
-    return file
-  else
-    {file => partials[file].map{|pn| build_tree(partials, pn)}}
-  end
-end
-
-puts parents.sort.map{|p| build_tree(partials, p)}.to_yaml
+puts diff

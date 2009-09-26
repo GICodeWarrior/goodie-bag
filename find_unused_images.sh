@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/bin/sh
 #
 # Copyright (c) 2009 Rusty Burchfield
 #
@@ -21,35 +21,24 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-# Crude script to show the reference hierarchy of the specified partials.
+# Helps to find images that are not being referenced in your application.
 
-require 'yaml'
-require 'rubygems'
-require 'active_support'
+if [ $# -lt 2 ]
+then
+  echo 'Usage: find_unused_images.sh <image path> <search path>...' >> /dev/stderr
+  echo 'Example: find_unused_images.sh public/images app public/stylesheets public/javascripts' >> /dev/stderr
+  exit 1
+fi
 
-files = ARGV
-partials = {}
+image_path=$1
+shift
+search_path=$*
 
-files.each do |file_name|
-  short_name = file_name.sub(/app\/views\//, '').sub(/.html.erb$/, '')
-  partials[short_name] = []
-  File.open(file_name) do |file|
-    file.read.scan(/:partial\s*=>\s*("[^"]*"|'[^']*')/) do |groups|
-      name = groups.first.gsub(/^\s*['"]\/?|['"]\s*$/, '')
-      partials[short_name] << name.sub(/\/([^\/]+)$/, '/_\1')
-    end
-  end
-  partials[short_name].sort!.uniq!
-end
+escaped_image_path=$(echo $image_path | sed 's/\//\\\//g')
+escaped_search_path=$(echo $search_path | sed 's/\//\\\//g')
 
-parents = partials.keys.select{|n| !partials.values.any?{|v| v.include?(n)}}
+find $image_path -maxdepth 1 -type f -printf %f\\n \
+  | sort \
+  | sed 's/^\(.*\)\.\([^.]*\)$/grep -qR "\1" '"$escaped_search_path"' || echo '"$escaped_image_path"'\/\1.\2/' \
+  | sh
 
-def build_tree(partials, file)
-  if !partials[file] || partials[file].empty?
-    return file
-  else
-    {file => partials[file].map{|pn| build_tree(partials, pn)}}
-  end
-end
-
-puts parents.sort.map{|p| build_tree(partials, p)}.to_yaml

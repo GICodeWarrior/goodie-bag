@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/usr/bin/python
 #
 # Copyright (c) 2009 Rusty Burchfield
 #
@@ -21,35 +21,37 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
-# Crude script to show the reference hierarchy of the specified partials.
+# Given a cookies.sqlite from your firefox profile, an output file and any part
+# of a hostname will export all of the matching cookies into the output file.
 
-require 'yaml'
-require 'rubygems'
-require 'active_support'
+import sqlite3 as db
+import sys
 
-files = ARGV
-partials = {}
+cookiedb = sys.argv[1]
+targetfile = sys.argv[2]
+what = '%' + sys.argv[3] + '%'
 
-files.each do |file_name|
-  short_name = file_name.sub(/app\/views\//, '').sub(/.html.erb$/, '')
-  partials[short_name] = []
-  File.open(file_name) do |file|
-    file.read.scan(/:partial\s*=>\s*("[^"]*"|'[^']*')/) do |groups|
-      name = groups.first.gsub(/^\s*['"]\/?|['"]\s*$/, '')
-      partials[short_name] << name.sub(/\/([^\/]+)$/, '/_\1')
-    end
-  end
-  partials[short_name].sort!.uniq!
-end
+print "Filter: %s" % what
 
-parents = partials.keys.select{|n| !partials.values.any?{|v| v.include?(n)}}
+connection = db.connect(cookiedb)
+cursor = connection.cursor()
+statement = """
+  SELECT host, path, isSecure, expiry, name, value
+    FROM moz_cookies
+    WHERE host LIKE ?
+"""
 
-def build_tree(partials, file)
-  if !partials[file] || partials[file].empty?
-    return file
-  else
-    {file => partials[file].map{|pn| build_tree(partials, pn)}}
-  end
-end
+cursor.execute(statement, (what,))
 
-puts parents.sort.map{|p| build_tree(partials, p)}.to_yaml
+file = open(targetfile, 'w')
+format = "%s\tTRUE\t%s\t%s\t%d\t%s\t%s\n"
+index = 0
+for row in cursor.fetchall():
+  file.write(format % (row[0], row[1], str(bool(row[2])).upper(), row[3],
+                       str(row[4]), str(row[5])))
+  index += 1
+
+print "Count: %d" % index
+
+file.close()
+connection.close()
